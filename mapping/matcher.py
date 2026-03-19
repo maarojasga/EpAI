@@ -1,0 +1,242 @@
+"""
+matcher.py - Column matching engine with 3-tier strategy + AI interpretation.
+
+Tier 1: Exact match (header == DB column or known alias)
+Tier 2: Fuzzy match (Levenshtein distance >= 80%)
+Tier 3: AI interpretation via local LLM (Phi-3) or Gemini API
+"""
+
+import os
+import json
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+from .profiles import COLUMN_ALIASES, STAGING_SCHEMAS
+
+try:
+    from fuzzywuzzy import process as fuzz_process
+    HAS_FUZZY = True
+except ImportError:
+    HAS_FUZZY = False
+
+try:
+    from llama_cpp import Llama
+    HAS_LLAMA = True
+except ImportError:
+    HAS_LLAMA = False
+
+
+@dataclass
+class ColumnMatch:
+    """Represents a single column mapping decision."""
+    source: str
+    target: Optional[str]
+    method: str           # exact | alias | fuzzy | ai | user | unmatched
+    confidence: float     # 0.0-1.0
+    description: str = "" # human-readable explanation
+
+
+@dataclass
+class MappingResult:
+    """Full result of matching all columns from a file."""
+    target_table: str
+    auto_matched: List[ColumnMatch] = field(default_factory=list)
+    ai_suggestions: List[ColumnMatch] = field(default_factory=list)
+    unmatched: List[ColumnMatch] = field(default_factory=list)
+
+
+# Phi-3 prompt template tokens
+PHI3_USER_TAG = "<|user|>"
+PHI3_END_TAG = "<|end|>"
+PHI3_ASST_TAG = "<|assistant|>"
+
+
+class LLMManager:
+    """Local-first LLM: Phi-3 GGUF by default, Gemini if GEMINI_API_KEY is set."""
+
+    def __init__(self, models_dir=None):
+        self.local_llm = None
+        self.gemini_model = None
+
+        if models_dir is None:
+            models_dir = os.path.join(
+                os.path.expanduser("~"),
+                "OneDrive", "Documentos", "START HACK", "epAI", "models"
+            )
+
+        local_path = os.path.join(models_dir, "phi-3-mini-4k-instruct.gguf")
+        if HAS_LLAMA and os.path.exists(local_path):
+            try:
+                self.local_llm = Llama(
+                    model_path=local_path, n_ctx=2048, n_threads=4, verbose=False
+                )
+                print("[matcher] Loaded local LLM: Phi-3 Mini")
+            except Exception as e:
+                print(f"[matcher] Could not load local LLM: {e}")
+
+        api_key = os.getenv("GEMINI_API_KEY")
+        if api_key and self.local_llm is None:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=api_key)
+                self.gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+                print("[matcher] Using Gemini API")
+            except Exception as e:
+                print(f"[matcher] Gemini init failed: {e}")
+
+    @property
+    def available(self):
+        return self.local_llm is not None or self.gemini_model is not None
+
+    def interpret_columns(self, unmatched_headers, target_columns, target_table):
+        """Ask LLM to interpret unmatched column names (German/English)."""
+        if not self.available or not unmatched_headers:
+            return []
+
+        prompt = (
+            "You are a healthcare data mapping expert.\n"
+            f"Table: {target_table}\n"
+            f"Unmatched headers: {json.dumps(unmatched_headers, ensure_ascii=False)}\n"
+            f"Target columns: {json.dumps(target_columns, ensure_ascii=False)}\n"
+            "Suggest best match for each. Consider German medical terms.\n"
+            "If no match exists, set target to null.\n"
+            'Return ONLY JSON: [{\"source\":\"...\",\"target\":\"...\",\"description\":\"reason\",\"confidence\":0.85}]'
+        )
+
+        raw = ""
+        try:
+            if self.local_llm:
+                full_prompt = PHI3_USER_TAG + "\n" + prompt + PHI3_END_TAG + "\n" + PHI3_ASST_TAG
+                out = self.local_llm(
+                    full_prompt, max_tokens=1024, stop=[PHI3_END_TAG], temperature=0.3
+                )
+                raw = out["choices"][0]["text"]
+            elif self.gemini_model:
+                resp = self.gemini_model.generate_content(prompt)
+                raw = resp.text
+        except Exception as e:
+            print(f"[matcher] LLM error: {e}")
+            return []
+
+        return self._parse_ai_response(raw)
+
+    def _parse_ai_response(self, raw):
+        """Extract JSON array from LLM response."""
+        results = []
+        try:
+            start = raw.find("[")
+            end = raw.rfind("]") + 1
+            if start >= 0 and end > start:
+                items = json.loads(raw[start:end])
+                for item in items:
+                    results.append(ColumnMatch(
+                        source=item.get("source", ""),
+                        target=item.get("target"),
+                        method="ai",
+                        confidence=float(item.get("confidence", 0.5)),
+                        description=item.get("description", ""),
+                    ))
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"[matcher] Could not parse AI response: {e}")
+        return results
+
+
+# Singleton LLM manager (lazy init)
+_llm_manager = None
+
+
+def get_llm(models_dir=None):
+    global _llm_manager
+    if _llm_manager is None:
+        _llm_manager = LLMManager(models_dir)
+    return _llm_manager
+
+
+def match_columns(source_headers, target_table, use_ai=True, models_dir=None):
+    """
+    Match source file headers to a target staging table's columns.
+
+    Returns MappingResult with auto_matched, ai_suggestions, and unmatched.
+    """
+    schema = STAGING_SCHEMAS.get(target_table)
+    if not schema:
+        return MappingResult(target_table=target_table)
+
+    target_cols = [c for c in schema["columns"] if c != "coId"]
+    result = MappingResult(target_table=target_table)
+    still_unmatched = []
+
+    for header in source_headers:
+        match = _try_auto_match(header, target_cols)
+        if match:
+            result.auto_matched.append(match)
+        else:
+            still_unmatched.append(header)
+
+    # Tier 3: AI interpretation for remaining unmatched
+    if use_ai and still_unmatched:
+        llm = get_llm(models_dir)
+        ai_results = llm.interpret_columns(still_unmatched, target_cols, target_table)
+        matched_by_ai = {r.source for r in ai_results if r.target}
+        result.ai_suggestions = [r for r in ai_results if r.target]
+        for header in still_unmatched:
+            if header not in matched_by_ai:
+                result.unmatched.append(
+                    ColumnMatch(source=header, target=None, method="unmatched", confidence=0.0)
+                )
+    else:
+        for header in still_unmatched:
+            result.unmatched.append(
+                ColumnMatch(source=header, target=None, method="unmatched", confidence=0.0)
+            )
+
+    return result
+
+
+def _try_auto_match(header, target_cols):
+    """Try exact, alias, prefix, and fuzzy matching (tiers 1-2)."""
+    clean = header.strip()
+    clean_lower = clean.lower()
+
+    # Tier 1a: Exact match
+    for tc in target_cols:
+        if clean_lower == tc.lower():
+            return ColumnMatch(
+                source=header, target=tc, method="exact", confidence=1.0,
+                description=f"Exact match: {header} == {tc}"
+            )
+
+    # Tier 1b: Known alias (German -> English)
+    if clean_lower in COLUMN_ALIASES:
+        alias_target = COLUMN_ALIASES[clean_lower]
+        # Check alias target exists in this table's columns
+        target_lower_map = {t.lower(): t for t in target_cols}
+        if alias_target.lower() in target_lower_map:
+            return ColumnMatch(
+                source=header, target=target_lower_map[alias_target.lower()],
+                method="alias", confidence=0.95,
+                description=f"Known alias: {header} -> {alias_target}"
+            )
+
+    # Tier 1c: co-prefix match (source=sodium_mmol_L -> target=coSodium_mmol_L)
+    prefixed = "co" + clean[0:1].upper() + clean[1:] if clean else ""
+    for tc in target_cols:
+        if prefixed.lower() == tc.lower():
+            return ColumnMatch(
+                source=header, target=tc, method="exact", confidence=0.98,
+                description=f"Prefix match: co + {header} == {tc}"
+            )
+
+    # Tier 2: Fuzzy matching
+    if HAS_FUZZY:
+        target_lower_list = [t.lower() for t in target_cols]
+        best, score = fuzz_process.extractOne(clean_lower, target_lower_list)
+        if score >= 80:
+            real_target = target_cols[target_lower_list.index(best)]
+            return ColumnMatch(
+                source=header, target=real_target, method="fuzzy",
+                confidence=score / 100.0,
+                description=f"Fuzzy match ({score}%): {header} ~ {real_target}"
+            )
+
+    return None

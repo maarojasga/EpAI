@@ -1,0 +1,283 @@
+"""
+profiles.py — Target staging table schemas, column aliases, and fingerprints.
+
+Each profile defines:
+- target_table: the staging table name in the unified schema
+- columns: list of target DB columns
+- fingerprint: set of header keywords that identify this source type
+- aliases: dict of known header synonyms (German → English DB column)
+"""
+
+# ---------------------------------------------------------------------------
+# TARGET STAGING TABLE DEFINITIONS
+# ---------------------------------------------------------------------------
+
+STAGING_SCHEMAS = {
+    "tbCaseData": {
+        "columns": [
+            "coId", "coE2I222", "coPatientId", "coE2I223", "coE2I228",
+            "coLastname", "coFirstname", "coGender", "coDateOfBirth",
+            "coAgeYears", "coTypeOfStay", "coIcd", "coDrgName",
+            "coRecliningType", "coState",
+        ],
+        "fingerprint": {"lastname", "firstname", "gender", "dateofbirth", "typeofstay", "icd", "drg"},
+    },
+    "tbImportLabsData": {
+        "columns": [
+            "coId", "coCaseId", "coSpecimen_datetime",
+            "coSodium_mmol_L", "coSodium_flag", "cosodium_ref_low", "cosodium_ref_high",
+            "coPotassium_mmol_L", "coPotassium_flag", "coPotassium_ref_low", "coPotassium_ref_high",
+            "coCreatinine_mg_dL", "coCreatinine_flag", "coCreatinine_ref_low", "coCreatinine_ref_high",
+            "coEgfr_mL_min_1_73m2", "coEgfr_flag", "coEgfr_ref_low", "coEgfr_ref_high",
+            "coGlucose_mg_dL", "coGlucose_flag", "coGlucose_ref_low", "coGlucose_ref_high",
+            "coHemoglobin_g_dL", "coHb_flag", "coHb_ref_low", "coHb_ref_high",
+            "coWbc_10e9_L", "coWbc_flag", "coWbc_ref_low", "coWbc_ref_high",
+            "coPlatelets_10e9_L", "coPlatelets_flag", "coPlt_ref_low", "coPlt_ref_high",
+            "coCrp_mg_L", "coCrp_flag", "coCrp_ref_low", "coCrp_ref_high",
+            "coAlt_U_L", "coAlt_flag", "coAlt_ref_low", "coAlt_ref_high",
+            "coAst_U_L", "coAst_flag", "coAst_ref_low", "coAst_ref_high",
+            "coBilirubin_mg_dL", "coBilirubin_flag", "coBili_ref_low", "coBili_ref_high",
+            "coAlbumin_g_dL", "coAlbumin_flag", "coAlbumin_ref_low", "coAlbumin_ref_high",
+            "coInr", "coInr_flag", "coInr_ref_low", "coInr_ref_high",
+            "coLactate_mmol_L", "coLactate_flag", "coLactate_ref_low", "coLactate_ref_high",
+        ],
+        "fingerprint": {"sodium", "potassium", "creatinine", "hemoglobin", "specimen_datetime", "labs"},
+    },
+    "tbImportIcd10Data": {
+        "columns": [
+            "coId", "coCaseId", "coWard", "coAdmission_date", "coDischarge_date",
+            "coLength_of_stay_days", "coPrimary_icd10_code",
+            "coPrimary_icd10_description_en", "coSecondary_icd10_codes",
+            "cpSecondary_icd10_descriptions_en", "coOps_codes", "ops_descriptions_en",
+        ],
+        "fingerprint": {"icd10", "admission_date", "discharge_date", "ops_codes", "length_of_stay"},
+    },
+    "tbImportDeviceMotionData": {
+        "columns": [
+            "coId", "coCaseId", "coTimestamp", "coPatient_id",
+            "coMovement_index_0_100", "coMicro_movements_count",
+            "coBed_exit_detected_0_1", "coFall_event_0_1",
+            "coImpact_magnitude_g", "coPost_fall_immobility_minutes",
+        ],
+        "fingerprint": {"movement_index", "micro_movements", "bed_exit_detected", "fall_event", "impact_magnitude"},
+    },
+    "tbImportDevice1HzMotionData": {
+        "columns": [
+            "coId", "coCaseId", "coTimestamp", "coPatient_id", "coDevice_id",
+            "coBed_occupied_0_1", "coMovement_score_0_100",
+            "coAccel_x_m_s2", "coAccel_y_m_s2", "coAccel_z_m_s2", "coAccel_magnitude_g",
+            "coPressure_zone1_0_100", "coPressure_zone2_0_100",
+            "coPressure_zone3_0_100", "coPressure_zone4_0_100",
+            "coBed_exit_event_0_1", "coBed_return_event_0_1",
+            "coFall_event_0_1", "coImpact_magnitude_g", "coEvent_id",
+        ],
+        "fingerprint": {"device_id", "accel_x", "accel_y", "accel_z", "pressure_zone", "bed_occupied", "1hz"},
+    },
+    "tbImportMedicationInpatientData": {
+        "columns": [
+            "coId", "coCaseId", "coPatient_id", "coRecord_type", "coEncounter_id",
+            "coWard", "coAdmission_datetime", "coDischarge_datetime",
+            "coOrder_id", "coOrder_uuid", "coMedication_code_atc", "coMedication_name",
+            "coRoute", "coDose", "coDose_unit", "coFrequency",
+            "coOrder_start_datetime", "coOrder_stop_datetime",
+            "coIs_prn_0_1", "coIndication",
+            "prescriber_role", "order_status",
+            "administration_datetime", "administered_dose",
+            "administered_unit", "administration_status", "note",
+        ],
+        "fingerprint": {"medication", "atc", "order_id", "route", "dose", "prn", "encounter_id", "prescriber"},
+    },
+    "tbImportNursingDailyReportsData": {
+        "columns": [
+            "coId", "coCaseId", "coPatient_id", "coWard",
+            "coReport_date", "coShift", "coNursing_note_free_text",
+        ],
+        "fingerprint": {"nursing", "report_date", "shift", "nursing_note", "free_text"},
+    },
+}
+
+# ---------------------------------------------------------------------------
+# KNOWN ALIASES  (source header → target DB column)
+# Covers: English CSV headers, German headers, common typos
+# ---------------------------------------------------------------------------
+
+COLUMN_ALIASES = {
+    # --- Universal IDs ---
+    "case_id":          "coCaseId",
+    "caseid":           "coCaseId",
+    "fallid":           "coCaseId",
+    "fallnr":           "coCaseId",
+    "fallnr (string)":  "coCaseId",
+    "einschidfall":     "coCaseId",
+    "patient_id":       "coPatient_id",
+    "patientid":        "coPatient_id",
+    "pid":              "coPatient_id",
+    "patientnr":        "coPatient_id",
+    "id_pat":           "coPatient_id",
+    "id_cas":           "coCaseId",
+
+    # --- Demographics ---
+    "sex":              "coGender",
+    "gender":           "coGender",
+    "geschlecht":       "coGender",
+    "age_years":        "coAgeYears",
+    "alter":            "coAgeYears",
+    "date_of_birth":    "coDateOfBirth",
+    "dateofbirth":      "coDateOfBirth",
+    "patgeb":           "coDateOfBirth",
+    "geburtsdatum":     "coDateOfBirth",
+    "lastname":         "coLastname",
+    "nachname":         "coLastname",
+    "firstname":        "coFirstname",
+    "vorname":          "coFirstname",
+
+    # --- Dates / Times ---
+    "timestamp":        "coTimestamp",
+    "zeitstempel":      "coTimestamp",
+    "aufnahme":         "coAdmission_date",
+    "aufndat":          "coAdmission_date",
+    "admission_date":   "coAdmission_date",
+    "admission_datetime": "coAdmission_datetime",
+    "entlassund":       "coDischarge_date",
+    "entlassdat":       "coDischarge_date",
+    "discharge_date":   "coDischarge_date",
+    "discharge_datetime": "coDischarge_datetime",
+    "date_ad":          "coAdmission_date",
+    "date_dis":         "coDischarge_date",
+    "specimen_datetime": "coSpecimen_datetime",
+    "report_date":      "coReport_date",
+    "order_start_datetime": "coOrder_start_datetime",
+    "order_stop_datetime": "coOrder_stop_datetime",
+
+    # --- Ward / Location ---
+    "station":          "coWard",
+    "abteilung":        "coWard",
+    "ward":             "coWard",
+
+    # --- Clinical ---
+    "shift":            "coShift",
+    "schicht":          "coShift",
+    "nursing_note_free_text": "coNursing_note_free_text",
+    "pflegebericht":    "coNursing_note_free_text",
+    "record_type":      "coRecord_type",
+    "encounter_id":     "coEncounter_id",
+    "order_id":         "coOrder_id",
+    "order_uuid":       "coOrder_uuid",
+    "medication_name":  "coMedication_name",
+    "medication_code_atc": "coMedication_code_atc",
+    "route":            "coRoute",
+    "dose":             "coDose",
+    "dose_unit":        "coDose_unit",
+    "frequency":        "coFrequency",
+    "is_prn_0_1":       "coIs_prn_0_1",
+    "indication":       "coIndication",
+    "prescriber_role":  "prescriber_role",
+    "order_status":     "order_status",
+    "administration_datetime": "administration_datetime",
+    "administered_dose": "administered_dose",
+    "administered_unit": "administered_unit",
+    "administration_status": "administration_status",
+    "note":             "note",
+
+    # --- Labs ---
+    "sodium_mmol_l":    "coSodium_mmol_L",
+    "sodium_flag":      "coSodium_flag",
+    "sodium_ref_low":   "cosodium_ref_low",
+    "sodium_ref_high":  "cosodium_ref_high",
+    "potassium_mmol_l": "coPotassium_mmol_L",
+    "potassium_flag":   "coPotassium_flag",
+    "potassium_ref_low": "coPotassium_ref_low",
+    "potassium_ref_high": "coPotassium_ref_high",
+    "creatinine_mg_dl": "coCreatinine_mg_dL",
+    "creatinine_flag":  "coCreatinine_flag",
+    "creatinine_ref_low": "coCreatinine_ref_low",
+    "creatinine_ref_high": "coCreatinine_ref_high",
+    "egfr_ml_min_1_73m2": "coEgfr_mL_min_1_73m2",
+    "egfr_flag":        "coEgfr_flag",
+    "egfr_ref_low":     "coEgfr_ref_low",
+    "egfr_ref_high":    "coEgfr_ref_high",
+    "glucose_mg_dl":    "coGlucose_mg_dL",
+    "glucose_flag":     "coGlucose_flag",
+    "glucose_ref_low":  "coGlucose_ref_low",
+    "glucose_ref_high": "coGlucose_ref_high",
+    "hemoglobin_g_dl":  "coHemoglobin_g_dL",
+    "hb_flag":          "coHb_flag",
+    "hb_ref_low":       "coHb_ref_low",
+    "hb_ref_high":      "coHb_ref_high",
+    "wbc_10e9_l":       "coWbc_10e9_L",
+    "wbc_flag":         "coWbc_flag",
+    "wbc_ref_low":      "coWbc_ref_low",
+    "wbc_ref_high":     "coWbc_ref_high",
+    "platelets_10e9_l": "coPlatelets_10e9_L",
+    "platelets_flag":   "coPlatelets_flag",
+    "plt_ref_low":      "coPlt_ref_low",
+    "plt_ref_high":     "coPlt_ref_high",
+    "crp_mg_l":         "coCrp_mg_L",
+    "crp_flag":         "coCrp_flag",
+    "crp_ref_low":      "coCrp_ref_low",
+    "crp_ref_high":     "coCrp_ref_high",
+    "alt_u_l":          "coAlt_U_L",
+    "alt_flag":         "coAlt_flag",
+    "alt_ref_low":      "coAlt_ref_low",
+    "alt_ref_high":     "coAlt_ref_high",
+    "ast_u_l":          "coAst_U_L",
+    "ast_flag":         "coAst_flag",
+    "ast_ref_low":      "coAst_ref_low",
+    "ast_ref_high":     "coAst_ref_high",
+    "bilirubin_mg_dl":  "coBilirubin_mg_dL",
+    "bilirubin_flag":   "coBilirubin_flag",
+    "bili_ref_low":     "coBili_ref_low",
+    "bili_ref_high":    "coBili_ref_high",
+    "albumin_g_dl":     "coAlbumin_g_dL",
+    "albumin_flag":     "coAlbumin_flag",
+    "albumin_ref_low":  "coAlbumin_ref_low",
+    "albumin_ref_high": "coAlbumin_ref_high",
+    "inr":              "coInr",
+    "inr_flag":         "coInr_flag",
+    "inr_ref_low":      "coInr_ref_low",
+    "inr_ref_high":     "coInr_ref_high",
+    "lactate_mmol_l":   "coLactate_mmol_L",
+    "lactate_flag":     "coLactate_flag",
+    "lactate_ref_low":  "coLactate_ref_low",
+    "lactate_ref_high": "coLactate_ref_high",
+
+    # --- ICD / OPS ---
+    "primary_icd10_code":             "coPrimary_icd10_code",
+    "primary_icd10_description_en":   "coPrimary_icd10_description_en",
+    "secondary_icd10_codes":          "coSecondary_icd10_codes",
+    "secondary_icd10_descriptions_en":"cpSecondary_icd10_descriptions_en",
+    "ops_codes":                      "coOps_codes",
+    "ops_descriptions_en":            "ops_descriptions_en",
+    "d_m":                            "coPrimary_icd10_code",
+    "d_m_str":                        "coPrimary_icd10_description_en",
+    "d_s":                            "coSecondary_icd10_codes",
+    "d_s_str":                        "cpSecondary_icd10_descriptions_en",
+    "proc":                           "coOps_codes",
+    "proc_str":                       "ops_descriptions_en",
+    "los":                            "coLength_of_stay_days",
+    "length_of_stay_days":            "coLength_of_stay_days",
+
+    # --- Device Motion ---
+    "movement_index_0_100":       "coMovement_index_0_100",
+    "micro_movements_count":      "coMicro_movements_count",
+    "bed_exit_detected_0_1":      "coBed_exit_detected_0_1",
+    "fall_event_0_1":             "coFall_event_0_1",
+    "impact_magnitude_g":         "coImpact_magnitude_g",
+    "post_fall_immobility_minutes": "coPost_fall_immobility_minutes",
+
+    # --- Device 1Hz ---
+    "device_id":              "coDevice_id",
+    "bed_occupied_0_1":       "coBed_occupied_0_1",
+    "movement_score_0_100":   "coMovement_score_0_100",
+    "accel_x_m_s2":           "coAccel_x_m_s2",
+    "accel_y_m_s2":           "coAccel_y_m_s2",
+    "accel_z_m_s2":           "coAccel_z_m_s2",
+    "accel_magnitude_g":      "coAccel_magnitude_g",
+    "pressure_zone1_0_100":   "coPressure_zone1_0_100",
+    "pressure_zone2_0_100":   "coPressure_zone2_0_100",
+    "pressure_zone3_0_100":   "coPressure_zone3_0_100",
+    "pressure_zone4_0_100":   "coPressure_zone4_0_100",
+    "bed_exit_event_0_1":     "coBed_exit_event_0_1",
+    "bed_return_event_0_1":   "coBed_return_event_0_1",
+    "event_id":               "coEvent_id",
+}

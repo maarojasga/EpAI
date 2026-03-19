@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pandas
+numpy
+openpyxl
+python-multipart
+llama-cpp-python
+google-generativeai
+fuzzywuzzy
+python-Levenshtein
+sentence-transformers
+requests
+tqdm
+pymupdf
