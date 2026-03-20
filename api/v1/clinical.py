@@ -170,20 +170,17 @@ def generate_evolution_summary(req: EvolutionRequest):
 
 @router.get("/nursing/history/{clinic_id}/{coPatientId}")
 def get_nursing_history(clinic_id: int, coPatientId: str):
-
     """
     Retrieves the chronological history of nursing reports for a patient.
     """
     try:
         from infrastructure.storage import in_memory_store as store
-        history = store.list_nursing_history(clinic_id, patient_id)
+        history = store.list_nursing_history(clinic_id, coPatientId)
         return {
             "status": "success",
-            "patient_id": patient_id,
+            "patient_id": coPatientId,
             "clinic_id": clinic_id,
             "data": history
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-

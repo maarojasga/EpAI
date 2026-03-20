@@ -9,7 +9,8 @@ Tier 3: AI interpretation via local LLM (Phi-3) or Gemini API
 import os
 import json
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+
 
 from infrastructure.mapping_engine.profiles import COLUMN_ALIASES, STAGING_SCHEMAS
 

@@ -839,7 +839,28 @@ create table tbIngestionJob
     coTimestamp         timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Nursing Notes (persisted NLP analysis)
+CREATE TABLE tbNursingNote
+(
+    coId                BIGSERIAL PRIMARY KEY,
+    coClinicId          INT NOT NULL,
+    coPatientId         VARCHAR(256) NULL,
+    coCaseId            VARCHAR(256) NULL,
+    coReportDate        VARCHAR(256) NULL,
+    coShift             VARCHAR(256) NULL,
+    coWard              VARCHAR(256) NULL,
+    coNoteText          TEXT NULL,
+    coSymptoms          TEXT NULL,
+    coInterventions     TEXT NULL,
+    coEvaluation        VARCHAR(512) NULL,
+    coPriorityLevel     VARCHAR(50) NULL,
+    coIsPriority        BOOLEAN DEFAULT FALSE,
+    coCreatedAt         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fkTBNURSINGNOTE_Clinic FOREIGN KEY (coClinicId) REFERENCES tbClinic(coId)
+);
+
 -- =============================================================================
 -- FIN
+
 -- =============================================================================
 

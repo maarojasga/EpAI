@@ -1,7 +1,8 @@
 from infrastructure.storage.postgres_db import execute_sql_file
 import os
+migration_path = os.path.join(os.path.dirname(__file__), "infrastructure", "storage", "nursing_migration.sql")
 
-migration_path = r"c:\Users\maaro\OneDrive\Documentos\EpAI\infrastructure\storage\nursing_migration.sql"
+
 
 if os.path.exists(migration_path):
     print(f"Applying migration: {migration_path}")

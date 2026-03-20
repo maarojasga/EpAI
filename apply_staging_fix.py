@@ -1,7 +1,7 @@
 from infrastructure.storage.postgres_db import execute_sql_file
 import os
+fix_path = os.path.join(os.path.dirname(__file__), "infrastructure", "storage", "staging_fix.sql")
 
-fix_path = r"c:\Users\maaro\OneDrive\Documentos\EpAI\infrastructure\storage\staging_fix.sql"
 
 if os.path.exists(fix_path):
     print(f"Applying staging fix: {fix_path}")

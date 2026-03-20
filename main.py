@@ -15,6 +15,8 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("EpAI")
+import os
+
 
 try:
     from dotenv import load_dotenv
