@@ -154,7 +154,24 @@ def detect(filepath: str) -> DetectionResult:
     if result.headers:
         result.detected_table, result.confidence = _detect_table(result.headers)
 
+    # SPECIAL HANDLING FOR epaAC (Dual Headers)
+    # If tbImportEpaAcData detected, check if row 1 contains IIDs
+    if result.detected_table == "tbImportEpaAcData" and result.dataframe is not None and len(result.dataframe) > 0:
+        row1 = list(result.dataframe.iloc[0].values)
+        row1_str = " ".join(str(c) for c in row1)
+        if re.search(r"E\d_I_\d+", row1_str, re.IGNORECASE):
+            # Promote row 1 to headers
+            new_headers = [str(c).strip() for c in row1]
+            # Rename dataframe columns
+            result.dataframe.columns = new_headers
+            # Drop the row that we used as header
+            result.dataframe = result.dataframe.iloc[1:].reset_index(drop=True)
+            result.headers = new_headers
+            # Re-detect to confirm
+            result.detected_table, result.confidence = _detect_table(result.headers)
+
     # Extract clinic name from filename
     result.suggested_clinic_name = _extract_clinic_name(filepath)
 
     return result
+

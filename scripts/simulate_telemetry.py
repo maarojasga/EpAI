@@ -17,7 +17,8 @@ def simulate(file_path, url, hz):
     print(f"[*] Frequency: {hz} Hz")
     
     try:
-        df = pd.read_csv(file_path)
+        # Some bad data files have structural errors (extra commas)
+        df = pd.read_csv(file_path, on_bad_lines='skip')
     except Exception as e:
         print(f"[!] Error reading CSV: {e}")
         return

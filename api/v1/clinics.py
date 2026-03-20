@@ -33,6 +33,7 @@ class ClinicResponse(BaseModel):
 
 
 @router.get("", response_model=List[ClinicResponse])
+@router.get("/", response_model=List[ClinicResponse], include_in_schema=False)
 def get_clinics():
     """List all registered clinics."""
     return [ClinicResponse(**c.to_dict()) for c in list_clinics()]
@@ -48,6 +49,7 @@ def get_clinic_by_id(clinic_id: int):
 
 
 @router.post("", response_model=ClinicResponse, status_code=201)
+@router.post("/", response_model=ClinicResponse, status_code=201, include_in_schema=False)
 def create_clinic(body: ClinicCreate):
     """
     Register a new clinic. If a clinic with the same name already exists,

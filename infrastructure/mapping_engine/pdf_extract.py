@@ -8,12 +8,29 @@ from typing import Dict, Any, Optional
 from infrastructure.mapping_engine.matcher import LLMManager
 
 def extract_text_from_pdf(pdf_path: str) -> str:
-    """Extract raw text from a PDF file."""
+    """
+    Extract raw text from a PDF file. If it's a scanned PDF (no text),
+    use VisionManager (LLaVA) to extract text from the first page image.
+    """
     text = ""
     try:
         with fitz.open(pdf_path) as doc:
             for page in doc:
                 text += page.get_text()
+                
+            # If less than 50 chars, it's likely a scanned image PDF
+            if len(text.strip()) < 50 and len(doc) > 0:
+                print(f"[PDF Extract] PDF appears scanned. Using Vision AI...")
+                first_page = doc[0]
+                pix = first_page.get_pixmap(dpi=150)
+                image_bytes = pix.tobytes("jpeg")
+                
+                from infrastructure.analyzers.vision_service import get_vlm
+                vlm = get_vlm()
+                prompt = "Extract all readable text from this scanned medical document."
+                extracted = vlm.analyze_image(image_bytes, prompt)
+                return extracted
+                
     except Exception as e:
         print(f"Error reading PDF {pdf_path}: {e}")
     return text
@@ -46,7 +63,7 @@ def extract_structured_data(text: str, models_dir: Optional[str] = None) -> Dict
     """
     
     try:
-        raw_response = llm.generate_text(prompt, system_prompt=system_prompt)
+        raw_response = llm.generate_text(prompt, system_prompt=system_prompt, json_mode=True)
         
         # Simple JSON extraction from the string
         import json

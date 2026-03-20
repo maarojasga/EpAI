@@ -13,24 +13,17 @@ class FallPipelineAnalyzer(IAnalyzer):
     def __init__(self):
         # State per patient: { patient_id: { ... } }
         self.patient_states: Dict[str, dict] = {}
-        
-        # Configuration
-        self.LOW_ACCEL_THRESHOLD = 0.5  # g
-        self.IMPACT_THRESHOLD = 2.0     # g
-        self.STABLE_ACCEL_THRESHOLD = 1.1 # g
-        self.MOVEMENT_THRESHOLD = 5.0    # movement score
-        self.IMMOBILE_ALERT_SECONDS = 30 # seconds
 
     def _get_or_create_state(self, patient_id: str) -> dict:
         if patient_id not in self.patient_states:
             self.patient_states[patient_id] = {
-                "isFalling": False,
-                "lowAccelerationStarted": None,
-                "impactDetected": False,
-                "impactMagnitude": 0.0,
+                "activeFall": False,
+                "fallCount": 0,
+                "impactG": 0.0,
                 "immobileSeconds": 0,
+                "recoveryCounter": 0,
                 "lastTimestamp": None,
-                "hasActiveFall": False
+                "lastImmobilityMin": None
             }
         return self.patient_states[patient_id]
 
@@ -40,68 +33,90 @@ class FallPipelineAnalyzer(IAnalyzer):
         
         now = observation.timestamp
         accel = observation.accel_magnitude
-        movement = observation.movement_score
+        mv = observation.movement_score
         
-        # 1. Fall Detection Logic
-        # Phase A: Free fall (Low acceleration)
-        if accel < self.LOW_ACCEL_THRESHOLD:
-            if not state["lowAccelerationStarted"]:
-                state["lowAccelerationStarted"] = now
+        # Calculate pressure average if available
+        press_dict = observation.pressure_zones or {}
+        press_vals = list(press_dict.values())
+        press_avg = sum(press_vals) / max(1, len(press_vals)) if press_vals else 50.0  # safe default
         
-        # Phase B: Impact Detection
-        if accel > self.IMPACT_THRESHOLD:
-            state["impactDetected"] = True
-            state["impactMagnitude"] = max(state["impactMagnitude"], accel)
+        bed_occupied = observation.bed_occupied
+        if bed_occupied is None:
+            bed_occupied = 1 # assume occupied
+
+        # ── STAGE 1: Fall Detection ──
+        fall_score = 0
+        if accel > 2.0: fall_score += 40
+        if mv > 80: fall_score += 30
+        if press_avg < 10: fall_score += 20
+        if bed_occupied == 0: fall_score += 10
+        
+        fall_detected = fall_score >= 70
+
+        if fall_detected and not state["activeFall"]:
+            state["activeFall"] = True
+            state["impactG"] = accel
+            state["immobileSeconds"] = 0
+            state["recoveryCounter"] = 0
+            state["fallCount"] += 1
             
-        # Phase C: Confirm Fall (Low accel followed by impact)
-        if state["lowAccelerationStarted"] and state["impactDetected"]:
-            if not state["hasActiveFall"]:
-                alerts.append(Alert(
-                    patient_id=observation.patient_id,
-                    device_id=observation.device_id,
-                    timestamp=now,
-                    type=AlertType.FALL,
-                    severity="Critical",
-                    message="Fall detected! (Free-fall + Impact)",
-                    impact_g=state["impactMagnitude"]
-                ))
-                state["hasActiveFall"] = True
-                state["isFalling"] = False # Reset fall phase
-                state["lowAccelerationStarted"] = None
-                state["impactDetected"] = False
-        
-        # 2. Immobility Tracking
-        if movement < self.MOVEMENT_THRESHOLD:
+            severity = "Critical" if accel > 4 else "Warning"
+            
+            alerts.append(Alert(
+                patient_id=observation.patient_id,
+                device_id=observation.device_id,
+                timestamp=now,
+                type=AlertType.FALL,
+                severity=severity,
+                message=f"Fall detected! (Score {fall_score}/100, Impact {accel:.2f}g)",
+                impact_g=accel
+            ))
+
+        # ── STAGE 2: Impact Magnitude ──
+        if fall_detected:
+            state["impactG"] = accel
+
+        # ── STAGE 3: Immobility Tracking ──
+        if state["activeFall"] and not fall_detected:
+            # We assume tick duration is roughly difference in timestamps or 1 second
+            delta_sec = 1
             if state["lastTimestamp"]:
-                delta = (now - state["lastTimestamp"]).total_seconds()
-                state["immobileSeconds"] += delta
-            
-            if state["immobileSeconds"] >= self.IMMOBILE_ALERT_SECONDS:
-                # Only alert once per immobility session
-                if state["immobileSeconds"] < self.IMMOBILE_ALERT_SECONDS + 2: 
+                delta_sec = max(1, (now - state["lastTimestamp"]).total_seconds())
+                
+            if mv <= 10:
+                state["immobileSeconds"] += delta_sec
+                
+                # We can fire an immobility alert every 30 seconds of immobility for example
+                modulo_threshold = 30
+                if state["immobileSeconds"] > 0 and int(state["immobileSeconds"]) % modulo_threshold == 0:
                     alerts.append(Alert(
                         patient_id=observation.patient_id,
                         device_id=observation.device_id,
                         timestamp=now,
                         type=AlertType.IMMOBILITY,
                         severity="Warning",
-                        message=f"No movement detected for {int(state['immobileSeconds'])} seconds."
+                        message=f"Post-fall immobility alert: patient unmoving for {int(state['immobileSeconds'])} seconds."
                     ))
-        else:
-            # 3. Recovery Detection (Movement after a fall)
-            if state["hasActiveFall"]:
-                alerts.append(Alert(
-                    patient_id=observation.patient_id,
-                    device_id=observation.device_id,
-                    timestamp=now,
-                    type=AlertType.RECOVERY,
-                    severity="Info",
-                    message="Patient is moving again after fall."
-                ))
-                state["hasActiveFall"] = False
-            
-            state["immobileSeconds"] = 0
-            
+
+            # Recovery: sustained movement > 15 for 5+ seconds
+            if mv > 15:
+                state["recoveryCounter"] += 1
+                if state["recoveryCounter"] > 5:
+                    state["activeFall"] = False
+                    state["lastImmobilityMin"] = state["immobileSeconds"] / 60.0
+                    state["recoveryCounter"] = 0
+                    
+                    alerts.append(Alert(
+                        patient_id=observation.patient_id,
+                        device_id=observation.device_id,
+                        timestamp=now,
+                        type=AlertType.RECOVERY,
+                        severity="Info",
+                        message=f"Patient recovered from fall. Total immobility time: {state['lastImmobilityMin']:.1f} minutes."
+                    ))
+            else:
+                state["recoveryCounter"] = 0
+
         state["lastTimestamp"] = now
         return alerts
 

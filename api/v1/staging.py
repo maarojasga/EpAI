@@ -10,7 +10,7 @@ from infrastructure.storage import in_memory_store as store
 router = APIRouter(prefix="/staging", tags=["Staging"])
 
 
-@router.get("")
+@router.get("/summary")
 def get_staging_overview():
     """Return row count per staging table."""
     summary = store.get_staging_summary()

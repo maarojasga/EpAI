@@ -52,11 +52,18 @@ PHI3_ASST_TAG = "<|assistant|>"
 
 
 class LLMManager:
-    """Local-first LLM: Phi-3 GGUF by default, Gemini if GEMINI_API_KEY is set."""
+    """Local-first LLM: Phi-3 GGUF by default, Gemini if GEMINI_API_KEY is set, Claude if online."""
 
     def __init__(self, models_dir=None):
+        from infrastructure.llm_provider import get_mode
         self.local_llm = None
         self.gemini_model = None
+        self._mode = get_mode()   # capture mode at init time
+
+        # In online mode, skip loading local models entirely
+        if self._mode == "online":
+            print("[matcher] Online mode — will use Claude API")
+            return
 
         if models_dir is None:
             # 1. Try environment variable (useful for cloud/containers)
@@ -77,7 +84,7 @@ class LLMManager:
         if HAS_LLAMA and os.path.exists(local_path):
             try:
                 self.local_llm = Llama(
-                    model_path=local_path, n_ctx=2048, n_threads=4, verbose=False
+                    model_path=local_path, n_ctx=2048, n_threads=12, verbose=False
                 )
                 print("[matcher] Loaded local LLM: Phi-3 Mini")
             except Exception as e:
@@ -95,6 +102,8 @@ class LLMManager:
 
     @property
     def available(self):
+        if self._mode == "online":
+            return True
         return self.local_llm is not None or self.gemini_model is not None
 
     def interpret_columns(self, unmatched_headers, target_columns, target_table):
@@ -114,12 +123,16 @@ class LLMManager:
 
         raw = ""
         try:
-            if self.local_llm:
-                full_prompt = PHI3_USER_TAG + "\n" + prompt + PHI3_END_TAG + "\n" + PHI3_ASST_TAG
-                out = self.local_llm(
-                    full_prompt, max_tokens=1024, stop=[PHI3_END_TAG], temperature=0.3
+            if self._mode == "online":
+                raw = self._claude_generate(prompt)
+            elif self.local_llm:
+                out = self.local_llm.create_chat_completion(
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=512, 
+                    temperature=0.0,
+                    response_format={"type": "json_object"}
                 )
-                raw = out["choices"][0]["text"]
+                raw = out["choices"][0]["message"]["content"]
             elif self.gemini_model:
                 resp = self.gemini_model.generate_content(prompt)
                 raw = resp.text
@@ -154,17 +167,35 @@ class LLMManager:
         if not self.available:
             return ""
 
+        # --- Online mode: Claude ---
+        if self._mode == "online":
+            return self._claude_generate(prompt, system_prompt=system_prompt)
+
         if self.local_llm:
-            full_prompt = ""
-            if system_prompt:
-                full_prompt += PHI3_USER_TAG + "\nSystem: " + system_prompt + PHI3_END_TAG + "\n"
-            full_prompt += PHI3_USER_TAG + "\n" + prompt + PHI3_END_TAG + "\n" + PHI3_ASST_TAG
-            
             try:
-                out = self.local_llm(
-                    full_prompt, max_tokens=1024, stop=[PHI3_END_TAG], temperature=0.2
-                )
-                return out["choices"][0]["text"].strip()
+                if json_mode:
+                    msgs = []
+                    if system_prompt:
+                        msgs.append({"role": "system", "content": system_prompt})
+                    msgs.append({"role": "user", "content": prompt})
+                    
+                    out = self.local_llm.create_chat_completion(
+                        messages=msgs,
+                        max_tokens=512,
+                        temperature=0.0,
+                        response_format={"type": "json_object"}
+                    )
+                    return out["choices"][0]["message"]["content"].strip()
+                else:
+                    full_prompt = ""
+                    if system_prompt:
+                        full_prompt += PHI3_USER_TAG + "\nSystem: " + system_prompt + PHI3_END_TAG + "\n"
+                    full_prompt += PHI3_USER_TAG + "\n" + prompt + PHI3_END_TAG + "\n" + PHI3_ASST_TAG
+                    
+                    out = self.local_llm(
+                        full_prompt, max_tokens=512, stop=[PHI3_END_TAG], temperature=0.2
+                    )
+                    return out["choices"][0]["text"].strip()
             except Exception as e:
                 print(f"[LLMManager] Local generate error: {e}")
                 return ""
@@ -180,6 +211,54 @@ class LLMManager:
         
         return ""
 
+    # -----------------------------------------------------------------
+    # Claude helpers (online mode)
+    # -----------------------------------------------------------------
+
+    def _claude_generate(self, prompt, system_prompt="", max_tokens=1024):
+        """Send a single prompt to Claude and return the text response."""
+        from infrastructure.llm_provider import get_claude_client, CLAUDE_MODEL
+        try:
+            client = get_claude_client()
+            kwargs = {
+                "model": CLAUDE_MODEL,
+                "max_tokens": max_tokens,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            if system_prompt:
+                kwargs["system"] = system_prompt
+            resp = client.messages.create(**kwargs)
+            return resp.content[0].text.strip()
+        except Exception as e:
+            print(f"[LLMManager] Claude generate error: {e}")
+            return ""
+
+    def claude_chat_completion(self, messages, system_prompt="", max_tokens=1024):
+        """
+        Multi-turn chat via Claude. `messages` is a list of
+        {"role": "user"|"assistant", "content": "..."}.
+        """
+        from infrastructure.llm_provider import get_claude_client, CLAUDE_MODEL
+        try:
+            client = get_claude_client()
+            # Filter out system messages — Claude uses a separate param
+            chat_msgs = [m for m in messages if m["role"] != "system"]
+            # Ensure first message is from user (Claude requirement)
+            if chat_msgs and chat_msgs[0]["role"] != "user":
+                chat_msgs = [{"role": "user", "content": "Hello"}] + chat_msgs
+            kwargs = {
+                "model": CLAUDE_MODEL,
+                "max_tokens": max_tokens,
+                "messages": chat_msgs,
+            }
+            if system_prompt:
+                kwargs["system"] = system_prompt
+            resp = client.messages.create(**kwargs)
+            return resp.content[0].text.strip()
+        except Exception as e:
+            print(f"[LLMManager] Claude chat error: {e}")
+            return ""
+
 
 # Singleton LLM manager (lazy init)
 _llm_manager = None
@@ -187,9 +266,13 @@ _llm_manager = None
 
 def get_llm(models_dir=None):
     global _llm_manager
-    if _llm_manager is None:
+    from infrastructure.llm_provider import get_mode
+    current_mode = get_mode()
+    
+    if _llm_manager is None or _llm_manager._mode != current_mode:
         _llm_manager = LLMManager(models_dir)
     return _llm_manager
+
 
 
 def match_columns(source_headers, target_table, use_ai=True, models_dir=None):
@@ -259,13 +342,18 @@ def _try_auto_match(header, target_cols):
             )
 
     # Tier 1c: co-prefix match (source=sodium_mmol_L -> target=coSodium_mmol_L)
+    # Also handle E_I_ pattern for epaAC: e0_i_001 -> coE0I001
     prefixed = "co" + clean[0:1].upper() + clean[1:] if clean else ""
+    prefixed_norm = prefixed.replace("_", "").lower()
+
     for tc in target_cols:
-        if prefixed.lower() == tc.lower():
+        tc_norm = tc.lower().replace("_", "")
+        if prefixed_norm == tc_norm:
             return ColumnMatch(
                 source=header, target=tc, method="exact", confidence=0.98,
                 description=f"Prefix match: co + {header} == {tc}"
             )
+
 
     # Tier 2: Fuzzy matching
     if HAS_FUZZY:

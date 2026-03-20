@@ -27,7 +27,7 @@ class TelemetryCleaner:
             return default
         
         # Remove any non-numeric chars (except decimal point and minus)
-        clean_s = re.sub(r'[^-0.9.]', '', s_val)
+        clean_s = re.sub(r'[^-0-9.]', '', s_val)
         try:
             return float(clean_s)
         except ValueError:
@@ -74,16 +74,16 @@ class TelemetryCleaner:
         get = lambda *keys: next((row[k] for k in keys if k in row), None)
 
         return {
-            "patient_id": self.clean_id(get("patient_id", "PatientID", "patientID")),
-            "device_id": self.clean_id(get("device_id", "DeviceID", "deviceID")),
-            "timestamp": self.clean_timestamp(get("timestamp", "Timestamp", "timestamp")),
-            "bed_occupied": self.clean_bool(get("bed_occupied", "BedOccupied", "bed_occupied_0_1")),
-            "movement_score": self.clean_float(get("movement_score", "MovementScore", "movement_score_0_100")),
-            "accel_magnitude": self.clean_float(get("accel_magnitude", "AccelMag", "accel_magnitude_g")),
+            "patient_id": self.clean_id(get("coPatientId", "coPatient_id", "patient_id", "PatientID", "patientID")),
+            "device_id": self.clean_id(get("coDeviceId", "coDevice_id", "device_id", "DeviceID", "deviceID")),
+            "timestamp": self.clean_timestamp(get("coTimestamp", "timestamp", "Timestamp")),
+            "bed_occupied": self.clean_bool(get("coBed_occupied_0_1", "bed_occupied", "BedOccupied")),
+            "movement_score": self.clean_float(get("coMovement_score_0_100", "movement_score", "MovementScore")),
+            "accel_magnitude": self.clean_float(get("coAccel_magnitude_g", "accel_magnitude", "AccelMag")),
             "pressure_zones": {
-                "zone1": self.clean_float(get("pressure_zone1_0_100", "PressZ1", "pressZ1")),
-                "zone2": self.clean_float(get("pressure_zone2_0_100", "PressZ2", "pressZ2")),
-                "zone3": self.clean_float(get("pressure_zone3_0_100", "PressZ3", "pressZ3")),
-                "zone4": self.clean_float(get("pressure_zone4_0_100", "PressZ4", "pressZ4"))
+                "zone1": self.clean_float(get("coPressure_zone1_0_100", "pressure_zone1_0_100", "PressZ1", "pressZ1")),
+                "zone2": self.clean_float(get("coPressure_zone2_0_100", "pressure_zone2_0_100", "PressZ2", "pressZ2")),
+                "zone3": self.clean_float(get("coPressure_zone3_0_100", "pressure_zone3_0_100", "PressZ3", "pressZ3")),
+                "zone4": self.clean_float(get("coPressure_zone4_0_100", "pressure_zone4_0_100", "PressZ4", "pressZ4"))
             }
         }

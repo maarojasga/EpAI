@@ -57,6 +57,18 @@ async def map_device(req: DeviceMapRequest):
     device = use_cases.register_device(req.device_id, req.clinic_id, req.location)
     return device.to_dict()
 
+@router.patch("/alerts/{alert_id}/resolve")
+async def resolve_alert(alert_id: int):
+    """
+    Mark an alert as RESOLVED.
+    """
+    try:
+        use_cases.resolve_alert(alert_id)
+        return {"status": "success", "message": f"Alert {alert_id} resolved."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 # Initialize some dummy data for the demo
 use_cases.init_default_devices()

@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+venv_linux/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Environment
+.env
+
+# Data (Sensitive or large test data)
+data/*
+!data/IID-SID-ITEM.csv
+!data/devices.json
+!data/clinics.json
+
+# Logs
+logs/
+*.log
+
+# Scripts
+scripts/
+
+# Docker
+
+# Omitimos ignorar Dockerfile si se quiere versionar el despliegue
+# .dockerignore
+# Dockerfile
+
+# AI/Agent Artifacts
+.gemini/
+.agents/
+.agent/
+brain/
+tmp/

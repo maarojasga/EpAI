@@ -15,9 +15,10 @@ from application.mapping.mapping_use_cases import (
     process_upload,
     apply_user_decisions,
     edit_column_mapping,
-    get_session_stats,
+    get_ingestion_job_stats,
 )
 from infrastructure.storage import in_memory_store as store
+
 from infrastructure.mapping_engine.profiles import STAGING_SCHEMAS
 
 router = APIRouter(prefix="/mapping", tags=["Mapping"])
@@ -37,8 +38,8 @@ class ColumnMatchOut(BaseModel):
     description: str
 
 
-class SessionOut(BaseModel):
-    session_id: str
+class IngestionJobOut(BaseModel):
+    job_id: str
     clinic_id: int
     clinic_name: str
     filename: str
@@ -50,6 +51,7 @@ class SessionOut(BaseModel):
     unmatched: List[ColumnMatchOut]
     total_rows: int
     status: str
+
 
 
 class ColumnDecision(BaseModel):
@@ -65,29 +67,31 @@ class ApproveRequest(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _session_to_out(session) -> SessionOut:
-    total = len(session.dataframe) if session.dataframe is not None else 0
-    return SessionOut(
-        session_id=session.session_id,
-        clinic_id=session.clinic_id,
-        clinic_name=session.clinic_name,
-        filename=session.filename,
-        detected_table=session.detected_table,
-        detection_confidence=round(session.detection_confidence, 3),
-        suggested_clinic_name=session.suggested_clinic_name,
-        auto_matched=[ColumnMatchOut(**m.__dict__) for m in session.auto_matched],
-        ai_suggestions=[ColumnMatchOut(**m.__dict__) for m in session.ai_suggestions],
-        unmatched=[ColumnMatchOut(**m.__dict__) for m in session.unmatched],
+def _job_to_out(job) -> IngestionJobOut:
+    total = len(job.dataframe) if job.dataframe is not None else 0
+    return IngestionJobOut(
+        job_id=job.job_id,
+        clinic_id=job.clinic_id,
+        clinic_name=job.clinic_name,
+        filename=job.filename,
+        detected_table=job.detected_table,
+        detection_confidence=round(job.detection_confidence, 3),
+        suggested_clinic_name=job.suggested_clinic_name,
+        auto_matched=[ColumnMatchOut(**m.__dict__) for m in job.auto_matched],
+        ai_suggestions=[ColumnMatchOut(**m.__dict__) for m in job.ai_suggestions],
+        unmatched=[ColumnMatchOut(**m.__dict__) for m in job.unmatched],
         total_rows=total,
-        status=session.status,
+        status=job.status,
     )
+
 
 
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/upload/{clinic_id}", response_model=SessionOut)
+@router.post("/upload/{clinic_id}", response_model=IngestionJobOut)
+
 async def upload_file(
     clinic_id: int,
     file: UploadFile = File(...),
@@ -102,8 +106,9 @@ async def upload_file(
     - `ai_suggestions` → 🟡 show in yellow (need user accept/reject)
     - `unmatched`      → 🔴 show in red (user must map manually or leave NULL)
 
-    Then call POST /mapping/approve/{session_id} with the user's decisions.
+    Then call POST /mapping/approve/{job_id} with the user's decisions.
     """
+
     clinic = get_clinic(clinic_id)
     if not clinic:
         raise HTTPException(status_code=404, detail=f"Clinic {clinic_id} not found")
@@ -113,56 +118,54 @@ async def upload_file(
     with open(temp_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    session = process_upload(
+    job = process_upload(
         filepath=temp_path,
         clinic=clinic,
         target_table=target_table,
         use_ai=use_ai,
     )
 
-    if session.status == "error":
+    if job.status == "error":
+
         raise HTTPException(
             status_code=422,
             detail="Could not identify this file's type. Specify target_table manually.",
         )
 
-    return _session_to_out(session)
+    return _job_to_out(job)
 
 
-@router.get("/session/{session_id}", response_model=SessionOut)
-def get_session(session_id: str):
-    """Get the current state of a mapping session."""
-    session = store.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return _session_to_out(session)
+
+@router.get("/job/{job_id}", response_model=IngestionJobOut)
+def get_ingestion_job(job_id: str):
+    """Get the current state of an ingestion job."""
+    job = store.get_ingestion_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Ingestion job not found")
+    return _job_to_out(job)
 
 
-@router.post("/approve/{session_id}")
-def approve_mapping(session_id: str, body: ApproveRequest):
+
+@router.post("/approve/{job_id}")
+def approve_mapping(job_id: str, body: ApproveRequest):
     """
     Submit user decisions for AI suggestions and unmatched columns, then load data.
-
-    - `accepted_target` = "coAdmissionDate" → map the column
-    - `accepted_target` = null              → reject (field stays NULL)
-
-    Auto-matched columns are always included automatically.
     """
-    session = store.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if session.status == "loaded":
-        raise HTTPException(status_code=400, detail="Session already loaded")
+    job = store.get_ingestion_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Ingestion job not found")
+    if job.status == "loaded":
+        raise HTTPException(status_code=400, detail="Job already loaded")
 
     decisions = {d.source: d.accepted_target for d in body.decisions}
-    session = apply_user_decisions(session, decisions)
+    job = apply_user_decisions(job, decisions)
 
     return {
-        "session_id": session_id,
-        "status": session.status,
-        "target_table": session.detected_table,
-        "rows_loaded": session.rows_loaded,
-        "quality_issues_count": len(session.quality_issues),
+        "job_id": job_id,
+        "status": job.status,
+        "target_table": job.detected_table,
+        "rows_loaded": job.rows_loaded,
+        "quality_issues_count": len(job.quality_issues),
         "quality_issues": [
             {
                 "field": q.field_name,
@@ -170,32 +173,33 @@ def approve_mapping(session_id: str, body: ApproveRequest):
                 "severity": q.severity,
                 "description": q.description,
             }
-            for q in session.quality_issues
+            for q in job.quality_issues
         ],
     }
 
 
-@router.put("/session/{session_id}/column")
+
+@router.put("/job/{job_id}/column")
 def update_column(
-    session_id: str,
+    job_id: str,
     source: str = Query(...),
     new_target: Optional[str] = Query(None),
 ):
     """
-    Edit a single column mapping in a pending session.
-    Set new_target=null to unmap a column.
+    Edit a single column mapping in a pending ingestion job.
     """
-    session = store.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if session.status == "loaded":
-        raise HTTPException(status_code=400, detail="Session already loaded, cannot edit")
+    job = store.get_ingestion_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Ingestion job not found")
+    if job.status == "loaded":
+        raise HTTPException(status_code=400, detail="Job already loaded, cannot edit")
 
-    updated = edit_column_mapping(session, source, new_target)
+    updated = edit_column_mapping(job, source, new_target)
     if not updated:
-        raise HTTPException(status_code=404, detail=f"Column '{source}' not found in session")
+        raise HTTPException(status_code=404, detail=f"Column '{source}' not found in job")
 
     return {"updated": True, "source": source, "new_target": new_target}
+
 
 
 @router.get("/tables")
@@ -219,12 +223,12 @@ def get_available_columns(table_name: str):
     }
 
 
-@router.get("/quality/{session_id}")
-def get_quality_issues(session_id: str):
-    """Get quality issues detected after loading a session."""
-    session = store.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+@router.get("/quality/{job_id}")
+def get_quality_issues(job_id: str):
+    """Get quality issues detected after loading an ingestion job."""
+    job = store.get_ingestion_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Ingestion job not found")
     return [
         {
             "entity_name": q.entity_name,
@@ -235,16 +239,17 @@ def get_quality_issues(session_id: str):
             "severity": q.severity,
             "description": q.description,
         }
-        for q in session.quality_issues
+        for q in job.quality_issues
     ]
 
-@router.get("/session/{session_id}/stats")
-def get_stats(session_id: str):
+
+@router.get("/job/{job_id}/stats")
+def get_job_stats_endpoint(job_id: str):
     """
-    Get dashboard metrics for a specific mapping session.
-    Includes mapping completeness, data quality summary, and row counts.
+    Get dashboard metrics for a specific ingestion job.
     """
-    session = store.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return get_session_stats(session)
+    job = store.get_ingestion_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Ingestion job not found")
+    return get_ingestion_job_stats(job)
+

@@ -15,13 +15,13 @@ class QualityIssue:
     """Maps to a row in tbDataQualityLog."""
     entity_name: str       # table name
     field_name: str        # column
-    record_key: str        # row identifier
-    rule_name: str         # check name
-    old_value: str         # problematic value
-    new_value: str = ""    # corrected value (if auto-corrected)
-    severity: str = "WARNING"  # INFO | WARNING | ERROR
-    check_type: str = ""   # null_check | type_check | range_check | format_check
-    description: str = ""
+    record_key: str        # row identifier (e.g. CaseId or Row Index)
+    rule_name: str         # check name (e.g. SEX_NORMALIZATION)
+    old_value: str         # original problematic value
+    new_value: str = ""    # corrected value
+    severity: str = "WARNING"  # INFO | WARNING | ERROR | CLEANED
+    check_type: str = ""   # null_check | type_check | range_check | format_check | cleaning_audit
+    description: str = ""  # Justification for the change
 
 
 def validate_dataframe(df: pd.DataFrame, target_table: str, file_source: str = "") -> List[QualityIssue]:
@@ -36,7 +36,57 @@ def validate_dataframe(df: pd.DataFrame, target_table: str, file_source: str = "
     issues.extend(_check_duplicates(df, target_table))
     issues.extend(_check_date_sequence(df, target_table))
     issues.extend(_check_clinical_ranges(df, target_table))
+    issues.extend(_check_negative_labs(df, target_table))
+    issues.extend(_check_lab_flags(df, target_table))
 
+    return issues
+
+
+def _check_negative_labs(df: pd.DataFrame, table: str) -> List[QualityIssue]:
+    """Check for negative values in numeric lab results (data errors)."""
+    issues = []
+    if table != "tbImportLabsData":
+        return issues
+        
+    for col in df.columns:
+        if col.startswith("co") and any(x in col.lower() for x in ["mmol_l", "mg_dl", "g_dl", "10e9_l", "u_l"]):
+            series = pd.to_numeric(df[col], errors='coerce').dropna()
+            negatives = series[series < 0]
+            if not negatives.empty:
+                issues.append(QualityIssue(
+                    entity_name=table,
+                    field_name=col,
+                    record_key=f"{len(negatives)} negative values",
+                    rule_name="NEGATIVE_VALUE_CHECK",
+                    old_value=f"Samples: {negatives.head(3).tolist()}",
+                    severity="ERROR",
+                    check_type="range_check",
+                    description=f"Detected {len(negatives)} negative values in laboratory result column '{col}'."
+                ))
+    return issues
+
+
+def _check_lab_flags(df: pd.DataFrame, table: str) -> List[QualityIssue]:
+    """Check that lab flags are H, L, HH, or LL (normalized)."""
+    issues = []
+    if table != "tbImportLabsData":
+        return issues
+        
+    valid_flags = {'H', 'L', 'HH', 'LL', None}
+    for col in df.columns:
+        if col.endswith("_flag"):
+            invalid = df[~df[col].isin(valid_flags)][col].dropna().unique()
+            if len(invalid) > 0:
+                issues.append(QualityIssue(
+                    entity_name=table,
+                    field_name=col,
+                    record_key=f"invalid flags: {invalid}",
+                    rule_name="LAB_FLAG_CHECK",
+                    old_value=str(invalid),
+                    severity="WARNING",
+                    check_type="format_check",
+                    description=f"Column '{col}' contains unrecognized flags outside of standard H, L, HH, LL."
+                ))
     return issues
 
 

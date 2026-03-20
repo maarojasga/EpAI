@@ -12,3 +12,14 @@ sentence-transformers
 requests
 tqdm
 pymupdf
+psycopg2-binary
+sqlalchemy
+anthropic
+python-dotenv
+
+# --- Offline Speech (Kokoro TTS) ---
+langdetect>=1.0.9
+kokoro>=0.9.4
+soundfile>=0.12.1
+numpy>=1.26.4
+misaki[en]>=0.5.1

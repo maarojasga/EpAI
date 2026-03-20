@@ -39,11 +39,15 @@ def ingest_sensor_data(raw_data: Dict[str, Any]) -> List[Alert]:
     new_alerts = _FALL_ANALYZER.analyze(observation)
     
     # 4. Enrich & Persist
+    case_id = store.get_latest_case_for_patient(observation.patient_id)
     for alert in new_alerts:
+        alert.case_id = str(case_id) if case_id else None
         device = store.get_device(alert.device_id)
         if device:
             alert.location = device.location
+            alert.clinic_id = device.clinic_id
         store.save_alert(alert)
+
         
     return new_alerts
 
@@ -74,3 +78,8 @@ def init_default_devices():
         register_device("MAT-9279", 2, "Emergency Ward, Bay 2")
         register_device("MAT-4527", 3, "Intensive Care, Unit 4")
         register_device("MAT-6574", 4, "Nursing Home, Wing C")
+
+def resolve_alert(alert_id: int):
+    """Marks an alert as RESOLVED in the database."""
+    store.update_alert_status(alert_id, "RESOLVED")
+

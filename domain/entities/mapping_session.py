@@ -16,8 +16,8 @@ class ColumnMatch:
 
 
 @dataclass
-class MappingSession:
-    session_id: str
+class IngestionJob:
+    job_id: str
     clinic_id: int
     clinic_name: str
     filepath: str
@@ -34,3 +34,19 @@ class MappingSession:
     rows_loaded: int = 0
     status: str = "pending_review"    # pending_review | loaded | error
     quality_issues: List[Any] = field(default_factory=list)
+    normalization_audit: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict) # column -> list of {old: v, new: v}
+    rejected_rows: List[Dict[str, Any]] = field(default_factory=list) # List of {index: i, reason: r, data: d}
+
+    def to_dict(self):
+        return {
+            "job_id": self.job_id,
+            "filename": self.filename,
+            "status": self.status,
+            "table": self.detected_table,
+            "rows_loaded": self.rows_loaded,
+            "rejected_count": len(self.rejected_rows),
+            "normalization_audit": self.normalization_audit
+        }
+
+
+
