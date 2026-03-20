@@ -74,7 +74,7 @@ class TelemetryCleaner:
         get = lambda *keys: next((row[k] for k in keys if k in row), None)
 
         return {
-            "patient_id": self.clean_id(get("coPatientId", "coPatient_id", "patient_id", "PatientID", "patientID")),
+            "patient_id": self.clean_id(get("coPatientId", "patient_id", "PatientID", "patientID")),
             "device_id": self.clean_id(get("coDeviceId", "coDevice_id", "device_id", "DeviceID", "deviceID")),
             "timestamp": self.clean_timestamp(get("coTimestamp", "timestamp", "Timestamp")),
             "bed_occupied": self.clean_bool(get("coBed_occupied_0_1", "bed_occupied", "BedOccupied")),

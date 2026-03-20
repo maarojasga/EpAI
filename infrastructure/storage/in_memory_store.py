@@ -12,8 +12,10 @@ Swap this out with a real DB adapter when needed.
 """
 import os
 import json
+import logging
 import pandas as pd
 from typing import Dict, List, Optional, Any
+
 from sqlalchemy import text
 from infrastructure.storage.postgres_db import SessionLocal
 
@@ -23,6 +25,10 @@ from domain.entities.mapping_session import IngestionJob
 from domain.entities.device import Device
 from domain.entities.alert import Alert
 from infrastructure.mapping_engine.profiles import STAGING_SCHEMAS
+
+# --- Configure Logger ---
+logger = logging.getLogger(__name__)
+
 
 # Persistence paths
 DEVICES_FILE = "data/devices.json"
@@ -155,8 +161,9 @@ def append_to_staging(table_name: str, df: pd.DataFrame) -> int:
         df_lower.to_sql(table_name.lower(), engine, if_exists='append', index=False)
         return len(df)
     except Exception as e:
-        print(f"Error appending to staging table {table_name}: {e}")
+        logger.error(f"Error appending to staging table {table_name}: {e}")
         return 0
+
 
 
 def get_latest_case_for_patient(patient_id: str) -> Optional[int]:
@@ -237,7 +244,8 @@ def upsert_case_data(df: pd.DataFrame):
         db.commit()
     except Exception as e:
         db.rollback()
-        print(f"Error upserting case data: {e}")
+        logger.error(f"Error upserting case data: {e}")
+
     finally:
         db.close()
 

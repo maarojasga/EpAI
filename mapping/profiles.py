@@ -15,16 +15,23 @@ Each profile defines:
 STAGING_SCHEMAS = {
     "tbCaseData": {
         "columns": [
-            "coId", "coE2I222", "coPatientId", "coE2I223", "coE2I228",
+            "coId", "coE2I222", "coCaseId", "coPatientId", "coPersonId", "coClinicId", "coE2I223", "coE2I228",
+
+            "coAdmission_date", "coDischarge_date",
             "coLastname", "coFirstname", "coGender", "coDateOfBirth",
             "coAgeYears", "coTypeOfStay", "coIcd", "coDrgName",
             "coRecliningType", "coState",
+
         ],
+
+
+
         "fingerprint": {"lastname", "firstname", "gender", "dateofbirth", "typeofstay", "icd", "drg"},
     },
     "tbImportLabsData": {
         "columns": [
-            "coId", "coCaseId", "coSpecimen_datetime",
+            "coId", "coCaseId", "coPatientId", "coSpecimen_datetime",
+
             "coSodium_mmol_L", "coSodium_flag", "cosodium_ref_low", "cosodium_ref_high",
             "coPotassium_mmol_L", "coPotassium_flag", "coPotassium_ref_low", "coPotassium_ref_high",
             "coCreatinine_mg_dL", "coCreatinine_flag", "coCreatinine_ref_low", "coCreatinine_ref_high",
@@ -45,25 +52,28 @@ STAGING_SCHEMAS = {
     },
     "tbImportIcd10Data": {
         "columns": [
-            "coId", "coCaseId", "coWard", "coAdmission_date", "coDischarge_date",
+            "coId", "coCaseId", "coPatientId", "coWard", "coAdmission_date", "coDischarge_date",
             "coLength_of_stay_days", "coPrimary_icd10_code",
             "coPrimary_icd10_description_en", "coSecondary_icd10_codes",
-            "cpSecondary_icd10_descriptions_en", "coOps_codes", "ops_descriptions_en",
+            "coSecondary_icd10_descriptions_en", "coOps_codes", "coOps_descriptions_en",
         ],
+
+
         "fingerprint": {"icd10", "admission_date", "discharge_date", "ops_codes", "length_of_stay"},
     },
     "tbImportDeviceMotionData": {
         "columns": [
-            "coId", "coCaseId", "coTimestamp", "coPatient_id",
+            "coId", "coCaseId", "coTimestamp", "coPatientId",
             "coMovement_index_0_100", "coMicro_movements_count",
             "coBed_exit_detected_0_1", "coFall_event_0_1",
             "coImpact_magnitude_g", "coPost_fall_immobility_minutes",
+
         ],
         "fingerprint": {"movement_index", "micro_movements", "bed_exit_detected", "fall_event", "impact_magnitude"},
     },
     "tbImportDevice1HzMotionData": {
         "columns": [
-            "coId", "coCaseId", "coTimestamp", "coPatient_id", "coDevice_id",
+            "coId", "coCaseId", "coTimestamp", "coPatientId", "coDevice_id",
             "coBed_occupied_0_1", "coMovement_score_0_100",
             "coAccel_x_m_s2", "coAccel_y_m_s2", "coAccel_z_m_s2", "coAccel_magnitude_g",
             "coPressure_zone1_0_100", "coPressure_zone2_0_100",
@@ -71,11 +81,13 @@ STAGING_SCHEMAS = {
             "coBed_exit_event_0_1", "coBed_return_event_0_1",
             "coFall_event_0_1", "coImpact_magnitude_g", "coEvent_id",
         ],
+
         "fingerprint": {"device_id", "accel_x", "accel_y", "accel_z", "pressure_zone", "bed_occupied", "1hz"},
     },
     "tbImportMedicationInpatientData": {
         "columns": [
-            "coId", "coCaseId", "coPatient_id", "coRecord_type", "coEncounter_id",
+            "coId", "coCaseId", "coPatientId", "coRecord_type", "coEncounter_id",
+
             "coWard", "coAdmission_datetime", "coDischarge_datetime",
             "coOrder_id", "coOrder_uuid", "coMedication_code_atc", "coMedication_name",
             "coRoute", "coDose", "coDose_unit", "coFrequency",
@@ -89,9 +101,10 @@ STAGING_SCHEMAS = {
     },
     "tbImportNursingDailyReportsData": {
         "columns": [
-            "coId", "coCaseId", "coPatient_id", "coWard",
+            "coId", "coCaseId", "coPatientId", "coWard",
             "coReport_date", "coShift", "coNursing_note_free_text",
         ],
+
         "fingerprint": {"nursing", "report_date", "shift", "nursing_note", "free_text"},
     },
 }
@@ -109,10 +122,11 @@ COLUMN_ALIASES = {
     "fallnr":           "coCaseId",
     "fallnr (string)":  "coCaseId",
     "einschidfall":     "coCaseId",
-    "patient_id":       "coPatient_id",
-    "patientid":        "coPatient_id",
-    "pid":              "coPatient_id",
-    "patientnr":        "coPatient_id",
+    "patient_id":       "coPatientId",
+    "patientid":        "coPatientId",
+    "pid":              "coPatientId",
+    "patientnr":        "coPatientId",
+
 
     # --- Demographics ---
     "sex":              "coGender",
@@ -241,9 +255,10 @@ COLUMN_ALIASES = {
     "primary_icd10_code":             "coPrimary_icd10_code",
     "primary_icd10_description_en":   "coPrimary_icd10_description_en",
     "secondary_icd10_codes":          "coSecondary_icd10_codes",
-    "secondary_icd10_descriptions_en":"cpSecondary_icd10_descriptions_en",
+    "secondary_icd10_descriptions_en":"coSecondary_icd10_descriptions_en",
     "ops_codes":                      "coOps_codes",
-    "ops_descriptions_en":            "ops_descriptions_en",
+    "ops_descriptions_en":            "coOps_descriptions_en",
+
     "length_of_stay_days":            "coLength_of_stay_days",
 
     # --- Device Motion ---

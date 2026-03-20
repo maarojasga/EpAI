@@ -172,14 +172,15 @@ def _check_nulls(df: pd.DataFrame, table: str) -> List[QualityIssue]:
     issues = []
     # Critical columns that should not be null per table
     critical = {
-        "tbImportLabsData": ["coCaseId"],
-        "tbImportIcd10Data": ["coCaseId"],
-        "tbImportDeviceMotionData": ["coPatient_id", "coTimestamp"],
-        "tbImportDevice1HzMotionData": ["coPatient_id", "coTimestamp", "coDevice_id"],
-        "tbImportMedicationInpatientData": ["coPatient_id", "coMedication_name"],
-        "tbImportNursingDailyReportsData": ["coPatient_id", "coReport_date"],
+        "tbImportLabsData": ["coCaseId", "coPatientId"],
+        "tbImportIcd10Data": ["coCaseId", "coPatientId"],
+        "tbImportDeviceMotionData": ["coPatientId", "coTimestamp"],
+        "tbImportDevice1HzMotionData": ["coPatientId", "coTimestamp", "coDevice_id"],
+        "tbImportMedicationInpatientData": ["coPatientId", "coMedication_name"],
+        "tbImportNursingDailyReportsData": ["coPatientId", "coReport_date"],
         "tbCaseData": ["coPatientId"],
     }
+
 
     cols_to_check = critical.get(table, [])
     for col in cols_to_check:

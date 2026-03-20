@@ -240,8 +240,9 @@ def apply_user_decisions(
                 series = _audit_clean(series, clean_ward, "WARD_STANDARDIZATION", "Mapped to canonical German department name.", tgt)
             elif tgt in ("coAdmission_date", "coDischarge_date", "coAdmission_datetime", "coDischarge_datetime", "coSpecimen_datetime"):
                 series = _audit_clean(series, format_date_swiss, "DATE_NORMALIZATION", "Converted to Swiss standard format (DD.MM.YYYY).", tgt)
-            elif tgt in ("coCaseId", "coPatientId", "coPatient_id", "coClinicId", "coE2I222") or "patientid" in tgt_lower or "caseid" in tgt_lower:
+            elif tgt in ("coCaseId", "coPatientId", "coPatientId", "coClinicId", "coE2I222") or "patientid" in tgt_lower or "caseid" in tgt_lower:
                 series = _audit_clean(series, extract_numeric_id, "STRICT_ID_NORMALIZATION", "Removed all letters, hyphens, and non-numeric characters to extract a clean Integer ID.", tgt)
+
 
 
             elif "sex" in tgt_lower or "gender" in tgt_lower:

@@ -1,0 +1,44 @@
+[
+  {
+    "device_id": "MAT-1434",
+    "clinic_id": 1,
+    "location": "Room 101, Bed A",
+    "status": "online"
+  },
+  {
+    "device_id": "MAT-7873",
+    "clinic_id": 1,
+    "location": "Room 101, Bed B",
+    "status": "online"
+  },
+  {
+    "device_id": "MAT-5012",
+    "clinic_id": 2,
+    "location": "Emergency Ward, Bay 1",
+    "status": "online"
+  },
+  {
+    "device_id": "MAT-9279",
+    "clinic_id": 2,
+    "location": "Emergency Ward, Bay 2",
+    "status": "online"
+  },
+  {
+    "device_id": "MAT-4527",
+    "clinic_id": 3,
+    "location": "Intensive Care, Unit 4",
+    "status": "online"
+  },
+  {
+    "device_id": "MAT-6574",
+    "clinic_id": 4,
+    "location": "Nursing Home, Wing C",
+    "status": "online"
+  },
+  {
+    "device_id": "MAT-9999",
+    "clinic_id": 1,
+    "location": "ICU - Bed 12",
+    "status": "online"
+  }
+]

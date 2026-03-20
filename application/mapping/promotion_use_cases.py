@@ -58,7 +58,8 @@ def _upsert_case_data(df: pd.DataFrame, job: IngestionJob):
         return
 
     # Prepare Case Metadata
-    cases_df = df[[id_col, "coPatientId", "coPersonId"]].drop_duplicates(subset=[id_col])
+    cases_df = df[[id_col, "coPatientId", "coPersonId", "coClinicId"]].drop_duplicates(subset=[id_col])
+
     
     # Add extra metadata if present in columns (e.g. Names from epaAC or Labs)
     meta_cols = {

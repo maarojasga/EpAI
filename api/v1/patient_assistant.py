@@ -4,6 +4,8 @@ Patient Assistant API - Chat and personalized support for patients.
 from fastapi import APIRouter, HTTPException, Body, Response
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
+from infrastructure.mapping_engine.cleaners import extract_numeric_id
+
 
 from application.assistant import chat_use_cases as use_cases
 
@@ -29,17 +31,20 @@ async def patient_chat(req: ChatRequest):
     Patient chat endpoint.
     Retrieves history if patient_id is found, otherwise gives general info.
     """
-    result = use_cases.process_patient_query(req.clinic_id, req.patient_id, req.query, req.conversation_id)
+    clean_id = str(extract_numeric_id(req.patient_id)) if req.patient_id else None
+    result = use_cases.process_patient_query(req.clinic_id, clean_id, req.query, req.conversation_id)
     return result
+
 
 @router.post("/profile/create")
 async def create_profile(req: ProfileRequest):
     """
     Register a new patient profile.
     """
+    clean_id = str(extract_numeric_id(req.patient_id))
     profile = use_cases.create_new_profile(
         req.clinic_id, 
-        req.patient_id, 
+        clean_id, 
         {
             "first_name": req.first_name,
             "last_name": req.last_name,
@@ -53,15 +58,18 @@ async def create_profile(req: ProfileRequest):
         "profile": profile
     }
 
+
 @router.get("/interpret-labs/{clinic_id}/{patient_id}")
 async def interpret_labs(clinic_id: int, patient_id: str):
     """
     Analyzes the patient's latest labs and explains them in simple language.
     """
-    result = use_cases.interpret_patient_labs(clinic_id, patient_id)
+    clean_id = str(extract_numeric_id(patient_id))
+    result = use_cases.interpret_patient_labs(clinic_id, clean_id)
     if result.get("status") == "error":
         raise HTTPException(status_code=404, detail=result.get("message"))
     return result
+
 
 class SpeakRequest(BaseModel):
     text: str

@@ -4,6 +4,8 @@ chat_use_cases.py - Logic for the Patient Assistant Chat.
 from typing import Dict, Any, List, Optional
 from infrastructure.storage import query_service
 from domain.entities.alert import Alert # Reusing Alert for simple messaging
+from infrastructure.mapping_engine.cleaners import extract_numeric_id
+
 
 def process_patient_query(clinic_id: int, patient_id: Optional[str], query: str, conversation_id: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -22,7 +24,9 @@ def process_patient_query(clinic_id: int, patient_id: Optional[str], query: str,
 
     context = None
     if patient_id:
-        context = query_service.get_patient_summary(clinic_id, patient_id)
+        clean_id = str(extract_numeric_id(patient_id))
+        context = query_service.get_patient_summary(clinic_id, clean_id)
+
 
     # System prompt
     system_prompt = (
@@ -126,15 +130,19 @@ def process_patient_query(clinic_id: int, patient_id: Optional[str], query: str,
     return result
 
 def create_new_profile(clinic_id: int, patient_id: str, details: Dict[str, Any]):
-    return query_service.create_patient_profile(clinic_id, patient_id, details)
+    clean_id = str(extract_numeric_id(patient_id))
+    return query_service.create_patient_profile(clinic_id, clean_id, details)
+
 
 def interpret_patient_labs(clinic_id: int, patient_id: str) -> Dict[str, Any]:
     """
     Fetches the patient summary (which includes labs) and uses Phi-3 to explain them
     in simple, patient-friendly terms.
     """
-    context = query_service.get_patient_summary(clinic_id, patient_id)
+    clean_id = str(extract_numeric_id(patient_id))
+    context = query_service.get_patient_summary(clinic_id, clean_id)
     if not context:
+
         return {
             "status": "error",
             "message": f"Couldn't find any lab records for patient {patient_id} in clinic {clinic_id}."
