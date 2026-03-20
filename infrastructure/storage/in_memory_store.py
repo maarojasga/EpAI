@@ -132,12 +132,125 @@ def next_clinic_id() -> int:
 # ---------------------------------------------------------------------------
 
 def get_ingestion_job(job_id: str) -> Optional[IngestionJob]:
-    return _INGESTION_JOBS.get(job_id)
+    # 1. Check memory cache first
+    if job_id in _INGESTION_JOBS:
+        return _INGESTION_JOBS[job_id]
+    
+    # 2. Try loading from PostgreSQL
+    db = SessionLocal()
+    try:
+        query = text("""
+            SELECT coJobId, coClinicId, coFilename, coFileFormat, coStatus, coTargetTable, 
+                   coRowsLoaded, coRejectedCount, coNormalizationAudit, coRejectedRows, coTimestamp
+            FROM tbIngestionJob WHERE coJobId = :id
+        """)
+        r = db.execute(query, {"id": job_id}).fetchone()
+        if not r:
+            return None
+            
+        # Reconstruct job object
+        # Note: In a real app, we'd fetch clinic name or join, 
+        # but for hackathon we use cached clinics or a default.
+        clinic_name = "Clinic"
+        clinic = get_clinic_by_id(r[1])
+        if clinic: clinic_name = clinic.name
+
+        job = IngestionJob(
+            job_id=r[0],
+            clinic_id=r[1],
+            clinic_name=clinic_name,
+            filepath="", # Temp path not persisted
+            filename=r[2],
+            file_format=r[3],
+            status=r[4],
+            detected_table=r[5],
+            detection_confidence=1.0, # Not persisted, assume High if loaded
+            rows_loaded=r[6],
+            normalization_audit=r[8] if r[8] else {},
+            rejected_rows=r[9] if r[9] else []
+        )
+        _INGESTION_JOBS[job_id] = job # Cache it
+        return job
+    except Exception as e:
+        logger.error(f"Error loading ingestion job {job_id}: {e}")
+        return None
+    finally:
+        db.close()
 
 
 def save_ingestion_job(job: IngestionJob) -> IngestionJob:
+    # 1. Update memory cache
     _INGESTION_JOBS[job.job_id] = job
+    
+    # 2. Persist to PostgreSQL
+    db = SessionLocal()
+    try:
+        # Upsert logic
+        check = db.execute(text("SELECT coId FROM tbIngestionJob WHERE coJobId = :id"), {"id": job.job_id}).fetchone()
+        
+        params = {
+            "id": job.job_id,
+            "cid": job.clinic_id,
+            "fn": job.filename,
+            "fmt": job.file_format,
+            "stat": job.status,
+            "tab": job.detected_table,
+            "rows": job.rows_loaded,
+            "rej_cnt": len(job.rejected_rows),
+            "audit": json.dumps(job.normalization_audit),
+            "rej_rows": json.dumps(job.rejected_rows)
+        }
+        
+        if check:
+            sql = text("""
+                UPDATE tbIngestionJob 
+                SET coStatus = :stat, coRowsLoaded = :rows, coRejectedCount = :rej_cnt, 
+                    coNormalizationAudit = :audit, coRejectedRows = :rej_rows, coTargetTable = :tab
+                WHERE coJobId = :id
+            """)
+        else:
+            sql = text("""
+                INSERT INTO tbIngestionJob (coJobId, coClinicId, coFilename, coFileFormat, coStatus, coTargetTable, coRowsLoaded, coRejectedCount, coNormalizationAudit, coRejectedRows)
+                VALUES (:id, :cid, :fn, :fmt, :stat, :tab, :rows, :rej_cnt, :audit, :rej_rows)
+            """)
+            
+        db.execute(sql, params)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error persisting ingestion job {job.job_id}: {e}")
+    finally:
+        db.close()
+    
     return job
+
+def list_ingestion_history() -> List[Dict[str, Any]]:
+    """Returns all historical file ingestion jobs from PostgreSQL."""
+    db = SessionLocal()
+    try:
+        query = text("""
+            SELECT coJobId, coFilename, coFileFormat, coStatus, coTargetTable, coRowsLoaded, coRejectedCount
+            FROM tbIngestionJob ORDER BY coTimestamp DESC
+        """)
+        results = db.execute(query).fetchall()
+        return [
+            {
+                "job_id": r[0],
+                "filename": r[1],
+                "file_format": r[2],
+                "status": r[3],
+                "table": r[4],
+                "rows_loaded": r[5],
+                "rejected_count": r[6]
+            }
+            for r in results
+        ]
+    except Exception as e:
+        logger.error(f"Error listing ingestion history: {e}")
+        return []
+    finally:
+        db.close()
+
 
 
 

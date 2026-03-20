@@ -136,8 +136,9 @@ async def upload_file(
 
 
 
-@router.get("/job/{job_id}", response_model=IngestionJobOut)
+@router.get("/session/{job_id}", response_model=IngestionJobOut)
 def get_ingestion_job(job_id: str):
+
     """Get the current state of an ingestion job."""
     job = store.get_ingestion_job(job_id)
     if not job:
@@ -179,9 +180,10 @@ def approve_mapping(job_id: str, body: ApproveRequest):
 
 
 
-@router.put("/job/{job_id}/column")
+@router.put("/session/{job_id}/column")
 def update_column(
     job_id: str,
+
     source: str = Query(...),
     new_target: Optional[str] = Query(None),
 ):
@@ -223,6 +225,36 @@ def get_available_columns(table_name: str):
     }
 
 
+
+@router.get("/session/{job_id}/stats")
+def get_job_stats_endpoint(job_id: str):
+    """
+    Get dashboard metrics for a specific ingestion job.
+    """
+    stats = get_ingestion_job_stats(job_id)
+    if not stats:
+        raise HTTPException(status_code=404, detail="Job stats not found")
+    return stats
+
+@router.get("/session/{job_id}", response_model=IngestionJobOut)
+def get_ingestion_job(job_id: str):
+    """Get the current state of an ingestion job."""
+    job = store.get_ingestion_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Ingestion job not found")
+    
+    # Map to output model
+    return IngestionJobOut(
+        job_id=job.job_id,
+        filename=job.filename,
+        status=job.status,
+        table=job.detected_table,
+        rows_loaded=job.rows_loaded,
+        rejected_count=len(job.rejected_rows),
+        normalization_audit=job.normalization_audit
+    )
+
+
 @router.get("/quality/{job_id}")
 def get_quality_issues(job_id: str):
     """Get quality issues detected after loading an ingestion job."""
@@ -241,15 +273,3 @@ def get_quality_issues(job_id: str):
         }
         for q in job.quality_issues
     ]
-
-
-@router.get("/job/{job_id}/stats")
-def get_job_stats_endpoint(job_id: str):
-    """
-    Get dashboard metrics for a specific ingestion job.
-    """
-    job = store.get_ingestion_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Ingestion job not found")
-    return get_ingestion_job_stats(job)
-

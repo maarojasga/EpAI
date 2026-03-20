@@ -106,20 +106,29 @@ class LLMManager:
             return True
         return self.local_llm is not None or self.gemini_model is not None
 
-    def interpret_columns(self, unmatched_headers, target_columns, target_table):
-        """Ask LLM to interpret unmatched column names (German/English)."""
+    def interpret_columns(self, unmatched_headers: List[str], target_columns: List[str], target_table: str, samples: Optional[Dict[str, List[Any]]] = None):
+        """Ask LLM to interpret unmatched column names, using data samples if available."""
         if not self.available or not unmatched_headers:
             return []
 
+        header_info = []
+        for h in unmatched_headers:
+            info = {"header": h}
+            if samples and h in samples:
+                info["example_values"] = [str(v) for v in samples[h][:5]] # top 5 samples
+            header_info.append(info)
+
         prompt = (
             "You are a healthcare data mapping expert.\n"
-            f"Table: {target_table}\n"
-            f"Unmatched headers: {json.dumps(unmatched_headers, ensure_ascii=False)}\n"
-            f"Target columns: {json.dumps(target_columns, ensure_ascii=False)}\n"
-            "Suggest best match for each. Consider German medical terms.\n"
-            "If no match exists, set target to null.\n"
-            'Return ONLY JSON: [{\"source\":\"...\",\"target\":\"...\",\"description\":\"reason\",\"confidence\":0.85}]'
+            f"Target Table: {target_table}\n"
+            f"Columns to analyze: {json.dumps(header_info, ensure_ascii=False)}\n"
+            f"Available Target DB Columns: {json.dumps(target_columns, ensure_ascii=False)}\n\n"
+            "Task: Map the input 'header' (which might be cryptic or encrypted) to the most likely 'target' DB column.\n"
+            "Use the 'example_values' to infer the meaning if the header is not clear.\n"
+            "If no certain match exists, set target to null.\n"
+            'Return ONLY JSON array: [{\"source\":\"header_name\",\"target\":\"db_col_name\",\"description\":\"brief reasoning\",\"confidence\":0.85}]'
         )
+
 
         raw = ""
         try:
@@ -275,11 +284,10 @@ def get_llm(models_dir=None):
 
 
 
-def match_columns(source_headers, target_table, use_ai=True, models_dir=None):
+def match_columns(source_headers, target_table, use_ai=True, models_dir=None, samples=None):
     """
     Match source file headers to a target staging table's columns.
-
-    Returns MappingResult with auto_matched, ai_suggestions, and unmatched.
+    `samples` is an optional dict {header: [val1, val2...]} to help AI inference.
     """
     schema = STAGING_SCHEMAS.get(target_table)
     if not schema:
@@ -299,7 +307,7 @@ def match_columns(source_headers, target_table, use_ai=True, models_dir=None):
     # Tier 3: AI interpretation for remaining unmatched
     if use_ai and still_unmatched:
         llm = get_llm(models_dir)
-        ai_results = llm.interpret_columns(still_unmatched, target_cols, target_table)
+        ai_results = llm.interpret_columns(still_unmatched, target_cols, target_table, samples=samples)
         matched_by_ai = {r.source for r in ai_results if r.target}
         result.ai_suggestions = [r for r in ai_results if r.target]
         for header in still_unmatched:
@@ -314,6 +322,7 @@ def match_columns(source_headers, target_table, use_ai=True, models_dir=None):
             )
 
     return result
+
 
 
 def _try_auto_match(header, target_cols):

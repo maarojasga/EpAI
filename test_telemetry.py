@@ -7,7 +7,7 @@ use_cases._FALL_ANALYZER = FallPipelineAnalyzer()
 use_cases.init_default_devices()
 
 data = {
-  "coPatient_id": "PAT123",
+  "coPatientId": "PAT123",
   "coDevice_id": "MAT-1434",
   "coTimestamp": "2026-03-18 10:00:00",
   "coBed_occupied_0_1": 0,

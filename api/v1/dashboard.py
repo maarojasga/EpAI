@@ -17,19 +17,8 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 @router.get("/ingestion/history")
 async def list_ingestion_history():
     """Lists all historical file ingestion jobs for audit selection."""
-    jobs = store._INGESTION_JOBS.values()
-    return [
-        {
-            "job_id": j.job_id,
-            "filename": j.filename,
-            "file_format": j.file_format,
-            "status": j.status,
-            "table": j.detected_table,
-            "rows_loaded": j.rows_loaded,
-            "rejected_count": len(j.rejected_rows)
-        }
-        for j in jobs
-    ]
+    return store.list_ingestion_history()
+
 
 @router.get("/ingestion/{job_id}/audit")
 async def get_ingestion_audit(job_id: str):
@@ -59,7 +48,8 @@ async def get_table_column_metadata(table_name: str):
     metadata = {}
     
     # Load epaAC catalog if it's an epaAC table
-    catalog_path = r"c:\Users\maaro\OneDrive\Documentos\EpAI\data\IID-SID-ITEM.csv"
+    catalog_path = os.getenv("CATALOG_PATH", "data/IID-SID-ITEM.csv")
+
     if table_name == "tbImportEpaAcData" and os.path.exists(catalog_path):
         _epaac_lookup.load(catalog_path)
 
@@ -123,15 +113,16 @@ async def get_executive_stats():
     
     # Calculate global metrics
     # Distribution of file types
-    jobs = store._INGESTION_JOBS.values()
-    count_loaded = sum(1 for j in jobs if j.status == "loaded")
+    jobs = store.list_ingestion_history()
+    count_loaded = sum(1 for j in jobs if j["status"] == "loaded")
     
     distribution = {}
     total_rejected = 0
     for j in jobs:
-        fmt = j.file_format.upper()
+        fmt = j["file_format"].upper()
         distribution[fmt] = distribution.get(fmt, 0) + 1
-        total_rejected += len(j.rejected_rows)
+        total_rejected += j.get("rejected_count", 0)
+
 
     # Reality-based Quality Score
     quality_score = 100.0

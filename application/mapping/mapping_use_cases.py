@@ -86,12 +86,28 @@ def process_upload(
 
     resolved_table = target_table or detection.detected_table
 
+    source_headers = list(detection.dataframe.columns)
+
+    # Extract samples for AI inference (first 5 rows for each column)
+    samples = {col: detection.dataframe[col].dropna().head(5).tolist() for col in source_headers}
+
+    # If target_table is not provided, try to auto-detect it using samples
+    if not resolved_table:
+        # This part assumes 'detect' function can take samples for table detection,
+        # but the current 'detect' function only takes filepath.
+        # For now, we'll use the original detection.detected_table if target_table is None.
+        # If the intention was to re-run table detection with samples, the 'detect' function
+        # would need to be updated or a new 'detect_table' function created.
+        # For this edit, we'll stick to the existing 'resolved_table' logic.
+        pass # No change needed here based on the provided snippet, as resolved_table is already set.
+
     # Run column matching engine
     raw_mapping = match_columns(
-        source_headers=list(detection.dataframe.columns),
+        source_headers=source_headers,
         target_table=resolved_table or "",
         use_ai=use_ai,
         models_dir=models_dir,
+        samples=samples, # Pass samples to match_columns
     )
 
     # Convert matcher result to domain entities
@@ -263,7 +279,8 @@ def apply_user_decisions(
                 series = _audit_clean(series, clean_numeric, "NUMERIC_CLEANING", "Sanitized numeric value and handled units/anomalies.", tgt)
             elif tgt.startswith(("coE0I", "coE1I", "coE2I", "coE3I")):
                 # epaAC Variables - Resolve SID to Name
-                catalog = r"c:\Users\maaro\OneDrive\Documentos\EpAI\data\IID-SID-ITEM.csv"
+                catalog = os.getenv("CATALOG_PATH", "data/IID-SID-ITEM.csv")
+
                 series = _audit_clean(series, lambda x: clean_epaac_val(x, catalog), "SID_RESOLUTION", "Resolved internal SID code to human-readable assessment item name.", tgt)
 
             
@@ -305,7 +322,12 @@ def apply_user_decisions(
     # 2. Prevent Duplicates (Deduplicate against current job and existing staging table)
     # 2a. Deduplicate within current batch/file first and log
     initial_count = len(mapped_df)
-    unique_mask = ~mapped_df.duplicated(keep='first')
+    
+    # "The last record is authoritative for duplicates" (epaAC-Data-1 requirement)
+    # Most tables keep first (original behavior), but epaAC specifically needs 'last'.
+    dedup_strategy = 'last' if job.detected_table == "tbImportEpaAcData" else 'first'
+    unique_mask = ~mapped_df.duplicated(keep=dedup_strategy)
+
     
     if (~unique_mask).any():
         for idx in mapped_df[~unique_mask].index:

@@ -42,6 +42,22 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# --- Auto-Initialize Database Schema ---
+@app.on_event("startup")
+def startup_db_init():
+    from infrastructure.storage.postgres_db import execute_sql_file
+    schema_path = "init.sql"
+    if os.path.exists(schema_path):
+        logger.info(f"Auto-initializing database schema from {schema_path}...")
+        try:
+            execute_sql_file(schema_path)
+            logger.info("Database schema initialized successfully.")
+        except Exception as e:
+            logger.error(f"Failed to initialize database schema: {e}")
+    else:
+        logger.warning(f"Schema file {schema_path} not found. Skipping auto-init.")
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -58,6 +74,7 @@ app.include_router(telemetry.router, prefix="/api/v1")
 app.include_router(patient_assistant.router, prefix="/api/v1")
 app.include_router(clinical.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
+
 
 
 
@@ -114,6 +131,7 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting EpAI Local Server on http://0.0.0.0:8001")
-    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
+    logger.info("Starting EpAI Local Server on http://0.0.0.0:8002")
+    uvicorn.run("main:app", host="0.0.0.0", port=8002, reload=True)
+
 

@@ -13,17 +13,19 @@ router = APIRouter(prefix="/patient-assistant", tags=["Patient Assistant"])
 
 class ChatRequest(BaseModel):
     clinic_id: int
-    patient_id: Optional[str] = None
+    coPatientId: Optional[str] = None
     query: str
     conversation_id: Optional[str] = None
 
+
 class ProfileRequest(BaseModel):
     clinic_id: int
-    patient_id: str
+    coPatientId: str
     first_name: str
     last_name: str
     gender: str
     dob: str
+
 
 @router.post("/chat")
 async def patient_chat(req: ChatRequest):
@@ -31,9 +33,10 @@ async def patient_chat(req: ChatRequest):
     Patient chat endpoint.
     Retrieves history if patient_id is found, otherwise gives general info.
     """
-    clean_id = str(extract_numeric_id(req.patient_id)) if req.patient_id else None
+    clean_id = str(extract_numeric_id(req.coPatientId)) if req.coPatientId else None
     result = use_cases.process_patient_query(req.clinic_id, clean_id, req.query, req.conversation_id)
     return result
+
 
 
 @router.post("/profile/create")
@@ -41,7 +44,7 @@ async def create_profile(req: ProfileRequest):
     """
     Register a new patient profile.
     """
-    clean_id = str(extract_numeric_id(req.patient_id))
+    clean_id = str(extract_numeric_id(req.coPatientId))
     profile = use_cases.create_new_profile(
         req.clinic_id, 
         clean_id, 
@@ -59,12 +62,13 @@ async def create_profile(req: ProfileRequest):
     }
 
 
-@router.get("/interpret-labs/{clinic_id}/{patient_id}")
-async def interpret_labs(clinic_id: int, patient_id: str):
+@router.get("/interpret-labs/{clinic_id}/{coPatientId}")
+async def interpret_labs(clinic_id: int, coPatientId: str):
     """
     Analyzes the patient's latest labs and explains them in simple language.
     """
-    clean_id = str(extract_numeric_id(patient_id))
+    clean_id = str(extract_numeric_id(coPatientId))
+
     result = use_cases.interpret_patient_labs(clinic_id, clean_id)
     if result.get("status") == "error":
         raise HTTPException(status_code=404, detail=result.get("message"))

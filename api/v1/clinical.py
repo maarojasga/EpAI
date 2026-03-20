@@ -148,8 +148,8 @@ class EvolutionNote(BaseModel):
     text: str
 
 class EvolutionRequest(BaseModel):
-    patient_id: str
-    case_id: str
+    coPatientId: str
+    coCaseId: str
     notes: List[EvolutionNote]
 
 @router.post("/nursing/evolution")
@@ -159,7 +159,7 @@ def generate_evolution_summary(req: EvolutionRequest):
     """
     try:
         notes_dict = [{"date": n.date, "text": n.text} for n in req.notes]
-        summary = nursing_use_cases.summarize_evolution(req.patient_id, req.case_id, notes_dict)
+        summary = nursing_use_cases.summarize_evolution(req.coPatientId, req.coCaseId, notes_dict)
         return {
             "status": "success",
             "summary": summary
@@ -167,8 +167,10 @@ def generate_evolution_summary(req: EvolutionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/nursing/history/{clinic_id}/{patient_id}")
-def get_nursing_history(clinic_id: int, patient_id: str):
+
+@router.get("/nursing/history/{clinic_id}/{coPatientId}")
+def get_nursing_history(clinic_id: int, coPatientId: str):
+
     """
     Retrieves the chronological history of nursing reports for a patient.
     """
